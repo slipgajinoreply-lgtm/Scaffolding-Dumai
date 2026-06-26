@@ -108,7 +108,17 @@
     font-size:11px;font-weight:700;background:#eaf6ee;color:var(--ok);
     padding:3px 9px;border-radius:20px;text-transform:uppercase;
   }
+  .dl-btn{
+    background:var(--steel);color:#fff;border:none;border-radius:6px;
+    width:28px;height:28px;font-size:14px;cursor:pointer;line-height:1;
+  }
+  .dl-btn:hover{background:var(--safety-dark);}
   .job-card .judul{font-size:15px;margin:6px 0 8px;font-weight:600;}
+  .judul-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;}
+  .judul-row .judul{flex:1;min-width:150px;}
+  .vol-info{display:flex;flex-direction:column;align-items:flex-end;white-space:nowrap;}
+  .vol-info .vol-dim{font-size:11.5px;color:#888;}
+  .vol-info .vol-total{font-size:14px;font-weight:700;color:var(--safety-dark);}
   .job-card .meta{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:#666;}
   .job-card .meta b{color:var(--ink);}
   .empty-state{text-align:center;padding:60px 20px;color:#888;}
@@ -259,7 +269,7 @@
           <div class="icon">📷</div>
           <p>Ketuk untuk ambil / pilih foto (maks. 4 foto)</p>
         </div>
-        <input type="file" id="f_fotoInput" accept="image/*" multiple capture="environment" class="hidden" onchange="handlePhotoSelect(event,'new')">
+        <input type="file" id="f_fotoInput" accept="image/*" multiple class="hidden" onchange="handlePhotoSelect(event,'new')">
         <div class="photo-preview" id="f_photoPreview"></div>
 
         <button class="btn" id="btnSubmitForm" onclick="submitNewJob()">Simpan Pekerjaan</button>
@@ -283,7 +293,7 @@
           <div class="icon">📷</div>
           <p>Ketuk untuk ambil / pilih foto pembongkaran (maks. 4 foto)</p>
         </div>
-        <input type="file" id="c_fotoInput" accept="image/*" multiple capture="environment" class="hidden" onchange="handlePhotoSelect(event,'close')">
+        <input type="file" id="c_fotoInput" accept="image/*" multiple class="hidden" onchange="handlePhotoSelect(event,'close')">
         <div class="photo-preview" id="c_photoPreview"></div>
         <button class="btn danger" id="btnCloseJob" onclick="submitCloseJob()">Tutup Pekerjaan (Close)</button>
       </div>
@@ -505,9 +515,18 @@ function renderList(data){
     div.innerHTML = `
       <div class="row1">
         <span class="no">${job.noPemasangan}</span>
-        <span class="badge">${job.status}</span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <button class="dl-btn" onclick="event.stopPropagation(); downloadJobPdf('${job.noPemasangan}')" title="Download PDF">⬇</button>
+          <span class="badge">${job.status}</span>
+        </span>
       </div>
-      <div class="judul">${job.judul || '-'}</div>
+      <div class="judul-row">
+        <div class="judul">${job.judul || '-'}</div>
+        <div class="vol-info">
+          <span class="vol-dim">${job.panjang||0} x ${job.lebar||0} x ${job.tinggi||0} m</span>
+          <span class="vol-total">${job.volume||0} m&sup3;</span>
+        </div>
+      </div>
       <div class="meta">
         <span>Tagging: <b>${job.tglTagging || '-'}</b></span>
         <span>Bongkar: <b>${job.tglBongkar || '-'}</b></span>
@@ -517,6 +536,17 @@ function renderList(data){
       </div>`;
     c.appendChild(div);
   });
+}
+
+/* download PDF langsung dari list tanpa buka detail */
+function downloadJobPdf(noPemasangan){
+  showLoading('Menyiapkan PDF...');
+  apiGet({ action:'getDetail', noPemasangan: noPemasangan }).then(res => {
+    hideLoading();
+    if (!res.success) { showToast(res.message || 'Gagal memuat data','error'); return; }
+    currentDetail = res.data;
+    generatePdfDetail();
+  }).catch(()=>{ hideLoading(); showToast('Gagal terhubung ke server','error'); });
 }
 
 /* ---------- HITUNG VOLUME ---------- */
@@ -581,12 +611,21 @@ function renderDetail(d){
   closePhotos = [];
   document.getElementById('c_photoPreview').innerHTML = '';
   document.getElementById('c_tglBongkar').value = todayISO();
+  renderDetailView(d);
+  document.getElementById('closeFormCard').style.display = (d.status === 'Open') ? 'block' : 'none';
+}
 
+function renderDetailView(d){
   const fotoHtml = (d.fotos || []).map(f =>
     `<div class="photo-thumb" style="width:70px;height:70px;"><img src="${f.thumbnail}"></div>`
   ).join('');
 
+  const editBtn = (d.status === 'Open')
+    ? `<button class="btn outline" style="margin-bottom:14px;" onclick="renderDetailEdit()">✎ Edit Data</button>`
+    : `<p style="font-size:12.5px;color:#999;margin-bottom:14px;">Pekerjaan sudah Close, data tidak bisa diedit.</p>`;
+
   document.getElementById('detailContent').innerHTML = `
+    ${editBtn}
     <div class="detail-grid">
       <div class="detail-item"><div class="lbl">No. Pemasangan</div><div class="val">${d.noPemasangan}</div></div>
       <div class="detail-item"><div class="lbl">Status</div><div class="val"><span class="status-pill ${d.status==='Open'?'open':'close'}">${d.status}</span></div></div>
@@ -608,8 +647,99 @@ function renderDetail(d){
     <div class="photo-preview">${fotoHtml || '<span style="color:#999;font-size:13px;">Belum ada foto</span>'}</div>
     <button class="btn outline" style="margin-top:10px;" onclick="generatePdfDetail()">⬇ Download / Print PDF</button>
   `;
+}
 
-  document.getElementById('closeFormCard').style.display = (d.status === 'Open') ? 'block' : 'none';
+function renderDetailEdit(){
+  const d = currentDetail;
+  document.getElementById('detailContent').innerHTML = `
+    <div class="section-title">Edit Data Pekerjaan</div>
+    <div class="grid2">
+      <div><label>Tanggal Mulai</label><input type="date" id="e_tglMulai" value="${isoDate(d.tglMulai)}"></div>
+      <div><label>Tanggal Tagging</label><input type="date" id="e_tglTagging" value="${isoDate(d.tglTagging)}"></div>
+    </div>
+    <label>Company</label>
+    <select id="e_company">
+      <option value="">-- Pilih Company --</option>
+      ${['SDO','SDS','SDO - Internal','SDS - Internal','Lainnya'].map(c =>
+        `<option ${c===d.company?'selected':''}>${c}</option>`).join('')}
+    </select>
+    <div class="grid2">
+      <div><label>Lokasi / Plant</label><input type="text" id="e_lokasi" value="${d.lokasi||''}"></div>
+      <div><label>Userplant</label><input type="text" id="e_userplant" value="${d.userplant||''}"></div>
+    </div>
+    <label>Judul Pekerjaan</label>
+    <input type="text" id="e_judul" value="${(d.judul||'').replace(/"/g,'&quot;')}">
+
+    <div class="section-title">Dimensi</div>
+    <div class="grid2">
+      <div><label>Panjang (m)</label><input type="number" step="0.01" id="e_panjang" value="${d.panjang||0}" oninput="hitungVolumeEdit()"></div>
+      <div><label>Lebar (m)</label><input type="number" step="0.01" id="e_lebar" value="${d.lebar||0}" oninput="hitungVolumeEdit()"></div>
+    </div>
+    <label>Tinggi (m)</label>
+    <input type="number" step="0.01" id="e_tinggi" value="${d.tinggi||0}" oninput="hitungVolumeEdit()">
+    <div class="volume-display">Volume (P&times;L&times;T): <b id="e_volumeShow">${d.volume||0}</b> m&sup3;</div>
+
+    <div class="section-title">Penanggung Jawab</div>
+    <div class="grid2">
+      <div><label>Request By</label><input type="text" id="e_requestBy" value="${d.requestBy||''}"></div>
+      <div><label>Action By</label><input type="text" id="e_actionBy" value="${d.actionBy||''}"></div>
+    </div>
+    <label>Site Manager</label>
+    <input type="text" id="e_siteManager" value="${d.siteManager||''}">
+
+    <div style="display:flex;gap:10px;margin-top:18px;">
+      <button class="btn outline" style="flex:1;" onclick="renderDetailView(currentDetail)">Batal</button>
+      <button class="btn" style="flex:1;" onclick="saveEditJob()">Simpan Perubahan</button>
+    </div>
+  `;
+}
+
+function isoDate(val){
+  // val format dd/MM/yyyy dari backend -> ubah ke yyyy-MM-dd untuk input type=date
+  if (!val) return '';
+  const parts = val.split('/');
+  if (parts.length !== 3) return '';
+  return parts[2] + '-' + parts[1] + '-' + parts[0];
+}
+
+function hitungVolumeEdit(){
+  const p = parseFloat(document.getElementById('e_panjang').value) || 0;
+  const l = parseFloat(document.getElementById('e_lebar').value) || 0;
+  const t = parseFloat(document.getElementById('e_tinggi').value) || 0;
+  document.getElementById('e_volumeShow').textContent = (p*l*t).toFixed(2);
+}
+
+function saveEditJob(){
+  const judul = document.getElementById('e_judul').value.trim();
+  if (!judul) { showToast('Judul pekerjaan wajib diisi','error'); return; }
+
+  const payload = {
+    action: 'updateJob',
+    noPemasangan: currentDetail.noPemasangan,
+    tglMulai: document.getElementById('e_tglMulai').value,
+    tglTagging: document.getElementById('e_tglTagging').value,
+    company: document.getElementById('e_company').value,
+    lokasi: document.getElementById('e_lokasi').value,
+    judul: judul,
+    panjang: document.getElementById('e_panjang').value,
+    lebar: document.getElementById('e_lebar').value,
+    tinggi: document.getElementById('e_tinggi').value,
+    requestBy: document.getElementById('e_requestBy').value,
+    userplant: document.getElementById('e_userplant').value,
+    actionBy: document.getElementById('e_actionBy').value,
+    siteManager: document.getElementById('e_siteManager').value
+  };
+
+  showLoading('Menyimpan perubahan...');
+  apiPost(payload).then(res => {
+    hideLoading();
+    if (res.success) {
+      showToast('Data berhasil diperbarui','success');
+      openDetail(currentDetail.noPemasangan); // reload detail terbaru
+    } else {
+      showToast(res.message || 'Gagal menyimpan perubahan','error');
+    }
+  }).catch(()=>{ hideLoading(); showToast('Gagal terhubung ke server','error'); });
 }
 
 /* ---------- CLOSE JOB ---------- */
