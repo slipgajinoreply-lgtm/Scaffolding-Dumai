@@ -635,22 +635,36 @@ function addKopSurat(doc){
   return y;
 }
 
-function addSignatureBlock(doc, requestBy, siteManager){
+function addSignatureBlock(doc, requestBy, userplant, siteManager){
   const pageHeight = doc.internal.pageSize.getHeight();
-  let y = pageHeight - 45;
+  let y = pageHeight - 50;
   doc.setLineWidth(0.3);
-  doc.line(15, y, 195, y); y += 8;
+  doc.line(15, y, 195, y); y += 10;
+
+  // 3 kolom sejajar, masing-masing lebar 60mm, mulai dari x=15
+  const colWidth = 60;
+  const colCenters = [15 + colWidth/2, 15 + colWidth + colWidth/2, 15 + colWidth*2 + colWidth/2];
+  const labels = ['Request By,', 'Acknowledge By,', 'Create By,'];
+  const names = [requestBy || '-', userplant || '-', siteManager || '-'];
 
   doc.setFontSize(10);
-  doc.text('Request by :', 20, y);
-  doc.text(String(requestBy || '-'), 60, y);
+  labels.forEach((label, i) => {
+    doc.text(label, colCenters[i], y, {align:'center'});
+  });
 
-  doc.text('Create by :', 130, y);
-  doc.text(String(siteManager || '-'), 170, y);
-  y += 18;
+  y += 22; // ruang kosong untuk tanda tangan manual
 
-  doc.text('Acknowledge by :', 20, y);
-  doc.line(60, y+1, 110, y+1); // garis kosong untuk ttd manual
+  // garis tanda tangan
+  colCenters.forEach(cx => {
+    doc.line(cx - 25, y, cx + 25, y);
+  });
+
+  y += 6;
+  doc.setFont(undefined,'bold');
+  names.forEach((name, i) => {
+    doc.text(String(name), colCenters[i], y, {align:'center'});
+  });
+  doc.setFont(undefined,'normal');
 }
 
 function generatePdfPemasangan(payload, noPemasangan){
@@ -673,7 +687,7 @@ function generatePdfPemasangan(payload, noPemasangan){
   y += 4;
   doc.setFontSize(11); doc.text('Dokumentasi Foto:', 15, y); y+=6;
   addPhotosToDoc(doc, payload.fotos, y);
-  addSignatureBlock(doc, payload.requestBy, payload.siteManager);
+  addSignatureBlock(doc, payload.requestBy, payload.userplant, payload.siteManager);
   doc.save(noPemasangan + '_Pemasangan.pdf');
 }
 
@@ -705,7 +719,7 @@ function generatePdfDetail(){
       const xx = 15 + (idx%2)*90;
       try { doc.addImage(img, 'JPEG', xx, yy, 80, 60); } catch(e){}
     });
-    addSignatureBlock(doc, d.requestBy, d.siteManager);
+    addSignatureBlock(doc, d.requestBy, d.userplant, d.siteManager);
     doc.save(d.noPemasangan + '_Detail.pdf');
   });
 }
