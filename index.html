@@ -633,14 +633,14 @@ function submitCloseJob(){
 
 /* ---------- GENERATE PDF ---------- */
 function addKopSurat(doc){
-  // Banner asli 1280x141 (rasio ~9.07:1), lebar cetak 180mm -> tinggi proporsional
-  const w = 180, h = w / (1280/141);
-  doc.addImage(KOP_SURAT_BASE64, 'JPEG', 15, 10, w, h);
-  let y = 10 + h + 4;
+  // Banner asli 1280x141 (rasio ~9.07:1), lebar cetak 150mm -> tinggi proporsional (lebih ramping)
+  const w = 150, h = w / (1280/141);
+  doc.addImage(KOP_SURAT_BASE64, 'JPEG', 15, 8, w, h);
+  let y = 8 + h + 3;
   doc.setLineWidth(0.4); doc.line(15, y, 195, y); y += 6;
-  doc.setFontSize(13); doc.setFont(undefined,'bold');
+  doc.setFontSize(12); doc.setFont(undefined,'bold');
   doc.text('REPORT PEMASANGAN SCAFFOLDING', 105, y, {align:'center'});
-  doc.setFont(undefined,'normal'); y += 8;
+  doc.setFont(undefined,'normal'); y += 6;
   return y;
 }
 
@@ -693,14 +693,12 @@ function generatePdfPemasangan(payload, noPemasangan){
     ['Tgl Tagging', payload.tglTagging||'-'], ['Company', payload.company||'-'],
     ['Lokasi/Plant', payload.lokasi||'-'], ['Judul Pekerjaan', payload.judul||'-'],
     ['Dimensi (PxLxT)', `${payload.panjang||0} x ${payload.lebar||0} x ${payload.tinggi||0} m`],
-    ['Request By', payload.requestBy||'-'], ['Userplant', payload.userplant||'-'],
-    ['Action By', payload.actionBy||'-'], ['Site Manager', payload.siteManager||'-'],
-    ['Pembuat Laporan', payload.pembuatLaporan||'-']
+    ['Request By', payload.requestBy||'-'], ['Userplant', payload.userplant||'-']
   ];
   doc.setFontSize(10);
-  rows.forEach(r => { doc.text(r[0], 15, y); doc.text(':', 70, y); doc.text(String(r[1]), 75, y); y+=7; });
+  rows.forEach(r => { doc.text(r[0], 15, y); doc.text(':', 70, y); doc.text(String(r[1]), 75, y); y+=6; });
 
-  y += 4;
+  y += 2;
   doc.setFontSize(11); doc.text('Dokumentasi Foto:', 15, y); y+=6;
   y = layoutPhotosGrid(doc, payload.fotos, y);
   ensureSpaceForSignature(doc, y);
@@ -722,9 +720,9 @@ function generatePdfDetail(){
     ['Request By', d.requestBy||'-'], ['Userplant', d.userplant||'-']
   ];
   doc.setFontSize(10);
-  rows.forEach(r => { doc.text(r[0], 15, y); doc.text(':', 70, y); doc.text(String(r[1]), 75, y); y+=7; });
+  rows.forEach(r => { doc.text(r[0], 15, y); doc.text(':', 70, y); doc.text(String(r[1]), 75, y); y+=6; });
 
-  y += 4;
+  y += 2;
   doc.setFontSize(11); doc.text('Dokumentasi Foto:', 15, y); y+=6;
 
   // pakai thumbnail link Drive (perlu cors-friendly image load)
@@ -744,8 +742,8 @@ function generatePdfDetail(){
 function layoutPhotosGrid(doc, photos, startY){
   if (!photos || photos.length === 0) return startY;
 
-  const boxW = 85, boxH = 36; // diperkecil agar 2 baris foto + signature muat 1 halaman
-  const gapX = 10, gapY = 5;
+  const boxW = 85, boxH = 62; // diperbesar kembali karena ruang atas sudah dirampingkan
+  const gapX = 10, gapY = 6;
   const startX = 15;
 
   let x = startX, y = startY, col = 0;
