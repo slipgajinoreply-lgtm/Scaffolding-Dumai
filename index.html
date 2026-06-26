@@ -257,7 +257,7 @@
         <div class="section-title">Foto Pemasangan</div>
         <div class="photo-zone" onclick="document.getElementById('f_fotoInput').click()">
           <div class="icon">📷</div>
-          <p>Ketuk untuk ambil / pilih foto (bisa lebih dari 1)</p>
+          <p>Ketuk untuk ambil / pilih foto (maks. 4 foto)</p>
         </div>
         <input type="file" id="f_fotoInput" accept="image/*" multiple capture="environment" class="hidden" onchange="handlePhotoSelect(event,'new')">
         <div class="photo-preview" id="f_photoPreview"></div>
@@ -281,7 +281,7 @@
         <label>Foto Pembongkaran <span style="color:var(--danger)">*wajib</span></label>
         <div class="photo-zone" onclick="document.getElementById('c_fotoInput').click()">
           <div class="icon">📷</div>
-          <p>Ketuk untuk ambil / pilih foto pembongkaran</p>
+          <p>Ketuk untuk ambil / pilih foto pembongkaran (maks. 4 foto)</p>
         </div>
         <input type="file" id="c_fotoInput" accept="image/*" multiple capture="environment" class="hidden" onchange="handlePhotoSelect(event,'close')">
         <div class="photo-preview" id="c_photoPreview"></div>
@@ -362,7 +362,7 @@ function resizeImage(file, maxDim, quality){
         const canvas = document.createElement('canvas');
         canvas.width = width; canvas.height = height;
         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', quality || 0.7));
+        resolve({ dataUrl: canvas.toDataURL('image/jpeg', quality || 0.7), width, height });
       };
       img.onerror = reject;
       img.src = e.target.result;
@@ -372,14 +372,23 @@ function resizeImage(file, maxDim, quality){
   });
 }
 
+const MAX_PHOTOS = 4;
+
 async function handlePhotoSelect(event, target){
   const files = Array.from(event.target.files || []);
+  const arr = (target === 'new') ? newPhotos : closePhotos;
+
   for (const file of files) {
+    if (arr.length >= MAX_PHOTOS) {
+      showToast('Maksimal ' + MAX_PHOTOS + ' foto', 'error');
+      break;
+    }
     try {
-      const dataUrl = await resizeImage(file, 1280, 0.7);
-      const item = { base64: dataUrl, mimeType: 'image/jpeg', fileName: file.name };
-      if (target === 'new') { newPhotos.push(item); renderPhotoPreview('f_photoPreview', newPhotos, 'new'); }
-      else { closePhotos.push(item); renderPhotoPreview('c_photoPreview', closePhotos, 'close'); }
+      const resized = await resizeImage(file, 1280, 0.7);
+      const item = { base64: resized.dataUrl, mimeType: 'image/jpeg', fileName: file.name, width: resized.width, height: resized.height };
+      arr.push(item);
+      if (target === 'new') renderPhotoPreview('f_photoPreview', newPhotos, 'new');
+      else renderPhotoPreview('c_photoPreview', closePhotos, 'close');
     } catch(err){ console.error(err); }
   }
   event.target.value = '';
@@ -635,6 +644,13 @@ function addKopSurat(doc){
   return y;
 }
 
+function ensureSpaceForSignature(doc, currentY){
+  const pageHeight = doc.internal.pageSize.getHeight();
+  if (currentY > pageHeight - 55) {
+    doc.addPage();
+  }
+}
+
 function addSignatureBlock(doc, requestBy, userplant, siteManager){
   const pageHeight = doc.internal.pageSize.getHeight();
   let y = pageHeight - 50;
@@ -686,7 +702,8 @@ function generatePdfPemasangan(payload, noPemasangan){
 
   y += 4;
   doc.setFontSize(11); doc.text('Dokumentasi Foto:', 15, y); y+=6;
-  addPhotosToDoc(doc, payload.fotos, y);
+  y = layoutPhotosGrid(doc, payload.fotos, y);
+  ensureSpaceForSignature(doc, y);
   addSignatureBlock(doc, payload.requestBy, payload.userplant, payload.siteManager);
   doc.save(noPemasangan + '_Pemasangan.pdf');
 }
@@ -702,8 +719,7 @@ function generatePdfDetail(){
     ['Tgl Mulai', d.tglMulai||'-'], ['Tgl Tagging', d.tglTagging||'-'], ['Tgl Bongkar', d.tglBongkar||'-'],
     ['Company', d.company||'-'], ['Lokasi/Plant', d.lokasi||'-'], ['Judul Pekerjaan', d.judul||'-'],
     ['Dimensi (PxLxT)', `${d.panjang||0} x ${d.lebar||0} x ${d.tinggi||0} m`], ['Volume', (d.volume||0)+' m3'],
-    ['Request By', d.requestBy||'-'], ['Userplant', d.userplant||'-'], ['Action By', d.actionBy||'-'],
-    ['Site Manager', d.siteManager||'-'], ['Pembuat Laporan', d.pembuatLaporan||'-']
+    ['Request By', d.requestBy||'-'], ['Userplant', d.userplant||'-']
   ];
   doc.setFontSize(10);
   rows.forEach(r => { doc.text(r[0], 15, y); doc.text(':', 70, y); doc.text(String(r[1]), 75, y); y+=7; });
@@ -713,24 +729,47 @@ function generatePdfDetail(){
 
   // pakai thumbnail link Drive (perlu cors-friendly image load)
   loadImagesAsBase64(d.fotos.map(f=>f.thumbnail)).then(images => {
-    images.forEach((img, idx) => {
-      if (!img) return;
-      const yy = y + Math.floor(idx/2)*65;
-      const xx = 15 + (idx%2)*90;
-      try { doc.addImage(img, 'JPEG', xx, yy, 80, 60); } catch(e){}
-    });
+    const validPhotos = images.filter(img => img);
+    y = layoutPhotosGrid(doc, validPhotos, y);
+    ensureSpaceForSignature(doc, y);
     addSignatureBlock(doc, d.requestBy, d.userplant, d.siteManager);
     doc.save(d.noPemasangan + '_Detail.pdf');
   });
 }
 
-function addPhotosToDoc(doc, fotos, startY){
-  if (!fotos || fotos.length === 0) return;
-  fotos.forEach((f, idx) => {
-    const yy = startY + Math.floor(idx/2)*65;
-    const xx = 15 + (idx%2)*90;
-    try { doc.addImage(f.base64, 'JPEG', xx, yy, 80, 60); } catch(e){}
+/**
+ * Layout foto dalam grid 2 kolom (maks 4 foto, 2 baris) supaya selalu muat
+ * dalam 1 halaman bersama signature. Rasio asli gambar dijaga (tidak gepeng).
+ */
+function layoutPhotosGrid(doc, photos, startY){
+  if (!photos || photos.length === 0) return startY;
+
+  const boxW = 85, boxH = 36; // diperkecil agar 2 baris foto + signature muat 1 halaman
+  const gapX = 10, gapY = 5;
+  const startX = 15;
+
+  let x = startX, y = startY, col = 0;
+
+  photos.slice(0, 4).forEach((p) => {
+    const natW = p.width || 800, natH = p.height || 600;
+    const ratio = Math.min(boxW / natW, boxH / natH);
+    const w = natW * ratio, h = natH * ratio;
+
+    const cx = x + (boxW - w) / 2;
+    const cy = y + (boxH - h) / 2;
+    try { doc.addImage(p.base64 || p.dataUrl, 'JPEG', cx, cy, w, h); } catch(e){}
+    doc.setDrawColor(200); doc.rect(x, y, boxW, boxH);
+
+    col++;
+    if (col >= 2) {
+      col = 0; x = startX; y += boxH + gapY;
+    } else {
+      x = startX + boxW + gapX;
+    }
   });
+
+  if (col !== 0) y += boxH + gapY;
+  return y;
 }
 
 function loadImagesAsBase64(urls){
@@ -743,7 +782,7 @@ function loadImagesAsBase64(urls){
         const canvas = document.createElement('canvas');
         canvas.width = img.width; canvas.height = img.height;
         canvas.getContext('2d').drawImage(img, 0, 0);
-        resolve(canvas.toDataURL('image/jpeg', 0.7));
+        resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.7), width: img.width, height: img.height });
       } catch(e){ resolve(null); }
     };
     img.onerror = () => resolve(null);
