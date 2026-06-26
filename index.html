@@ -631,9 +631,26 @@ function addKopSurat(doc){
   doc.setLineWidth(0.4); doc.line(15, y, 195, y); y += 6;
   doc.setFontSize(13); doc.setFont(undefined,'bold');
   doc.text('REPORT PEMASANGAN SCAFFOLDING', 105, y, {align:'center'});
-  doc.setFont(undefined,'normal'); y += 5;
-  doc.setFontSize(9); doc.text('SDO & SDS', 105, y, {align:'center'}); y += 8;
+  doc.setFont(undefined,'normal'); y += 8;
   return y;
+}
+
+function addSignatureBlock(doc, requestBy, siteManager){
+  const pageHeight = doc.internal.pageSize.getHeight();
+  let y = pageHeight - 45;
+  doc.setLineWidth(0.3);
+  doc.line(15, y, 195, y); y += 8;
+
+  doc.setFontSize(10);
+  doc.text('Request by :', 20, y);
+  doc.text(String(requestBy || '-'), 60, y);
+
+  doc.text('Create by :', 130, y);
+  doc.text(String(siteManager || '-'), 170, y);
+  y += 18;
+
+  doc.text('Acknowledge by :', 20, y);
+  doc.line(60, y+1, 110, y+1); // garis kosong untuk ttd manual
 }
 
 function generatePdfPemasangan(payload, noPemasangan){
@@ -656,6 +673,7 @@ function generatePdfPemasangan(payload, noPemasangan){
   y += 4;
   doc.setFontSize(11); doc.text('Dokumentasi Foto:', 15, y); y+=6;
   addPhotosToDoc(doc, payload.fotos, y);
+  addSignatureBlock(doc, payload.requestBy, payload.siteManager);
   doc.save(noPemasangan + '_Pemasangan.pdf');
 }
 
@@ -687,6 +705,7 @@ function generatePdfDetail(){
       const xx = 15 + (idx%2)*90;
       try { doc.addImage(img, 'JPEG', xx, yy, 80, 60); } catch(e){}
     });
+    addSignatureBlock(doc, d.requestBy, d.siteManager);
     doc.save(d.noPemasangan + '_Detail.pdf');
   });
 }
